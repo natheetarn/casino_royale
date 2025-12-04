@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
@@ -108,6 +108,20 @@ export default function LoginPage() {
         </Link>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-casino-black flex items-center justify-center px-4 md:px-8 lg:px-16 py-8">
+        <div className="bg-casino-black-lighter border border-casino-gray-darker rounded-xl p-8 w-full max-w-md">
+          <p className="text-casino-gray-light text-center">Loading...</p>
+        </div>
+      </main>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }
 

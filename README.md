@@ -89,19 +89,21 @@ cc/
 - ✅ Transaction history
 - ✅ Game history tracking
 
-### Phase 2 (Coming Soon)
-- 🎰 Slots Machine
-- 💣 Landmines
-- 🚗 Road Crossing
-- 🃏 Baccarat
+### Phase 2 (Completed) ✅
+- ✅ Slots Machine - Classic 3-reel slots with animated reels
+- ✅ Landmines - Grid-based risk/reward game with multipliers
+- ✅ Roulette - European roulette with custom carousel wheel
+- 🚗 Road Crossing (Planned)
+- 🃏 Baccarat (Planned)
 
-### Phase 3 (Future)
-- Tedious tasks system for broke players
-- CAPTCHA Hell
-- Cookie Clicker Grind
-- Trivia Quiz
-- The Waiting Game
-- Math Homework
+### Phase 3 (Completed) ✅
+- ✅ Tedious tasks system for broke players (balance = 0)
+- ✅ Math Homework - Solve 20 arithmetic problems
+- ✅ Trivia Quiz - Answer 5 questions correctly
+- ✅ CAPTCHA Hell - Solve 10 math captchas
+- ✅ Typing Test - Type text accurately with WPM tracking
+- ✅ The Waiting Game - Wait 5 minutes without switching tabs
+- ✅ Admin-configurable rewards and cooldowns
 
 ### Phase 4 (Future)
 - Multiplayer Texas Hold'em Poker
@@ -145,5 +147,5 @@ ISC
 
 ---
 
-**Status:** Phase 1 Complete ✅ | Phase 2 In Progress 🚧
+**Status:** Phase 1 Complete ✅ | Phase 2 Complete ✅ | Phase 3 Complete ✅
 

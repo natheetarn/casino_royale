@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { getActiveGames } from "@/lib/games/registry";
 
 export default function Home() {
+  const activeGames = getActiveGames();
+
   return (
     <main className="min-h-screen bg-casino-black flex items-center justify-center px-4 md:px-8 lg:px-16">
       <div className="text-center space-y-8 max-w-2xl">
@@ -26,24 +29,15 @@ export default function Home() {
         </div>
 
         <div className="mt-6 flex flex-wrap gap-3 justify-center text-sm">
-          <Link
-            href="/games/slots"
-            className="px-4 py-2 rounded-lg bg-casino-black-lighter border border-casino-gray text-casino-gray-light hover:bg-casino-gray-darker transition-colors duration-150"
-          >
-            Go to Slots 🎰
-          </Link>
-          <Link
-            href="/games/landmines"
-            className="px-4 py-2 rounded-lg bg-casino-black-lighter border border-casino-gray text-casino-gray-light hover:bg-casino-gray-darker transition-colors duration-150"
-          >
-            Go to Landmines 💣
-          </Link>
-          <Link
-            href="/games/roulette"
-            className="px-4 py-2 rounded-lg bg-casino-black-lighter border border-casino-gray text-casino-gray-light hover:bg-casino-gray-darker transition-colors duration-150"
-          >
-            Go to Roulette 🎡
-          </Link>
+          {activeGames.map((game) => (
+            <Link
+              key={game.id}
+              href={game.route}
+              className="px-4 py-2 rounded-lg bg-casino-black-lighter border border-casino-gray text-casino-gray-light hover:bg-casino-gray-darker transition-colors duration-150"
+            >
+              {game.emoji} {game.name}
+            </Link>
+          ))}
         </div>
       </div>
     </main>

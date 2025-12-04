@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useUser } from '../UserProvider';
 import { brainrotSlots } from '@/copy/brainrot';
+import { BetSelector } from './BetSelector';
 
 const BET_OPTIONS = [10, 50, 100, 500, 1000];
 
@@ -34,7 +35,6 @@ interface SpinResult {
 
 export function SlotsGame({ initialBalance }: { initialBalance: number }) {
   const [selectedBet, setSelectedBet] = useState<number>(50);
-  const [customBetInput, setCustomBetInput] = useState<string>('50');
   const [spinState, setSpinState] = useState<SpinState>('idle');
   const [spinMode, setSpinMode] = useState<SpinMode>('quick');
   // Current center index for each reel (0..REEL_STRIP.length-1)
@@ -45,11 +45,33 @@ export function SlotsGame({ initialBalance }: { initialBalance: number }) {
   const [highlightWin, setHighlightWin] = useState(false);
   const { user, setUser } = useUser();
 
+  // Ensure selectedBet is always valid
+  useEffect(() => {
+    if (selectedBet < 1 || selectedBet > balance) {
+      // Reset to a safe default if invalid
+      const safeBet = Math.min(50, Math.max(1, balance));
+      if (balance >= 1) {
+        setSelectedBet(safeBet);
+      }
+    }
+  }, [balance, selectedBet]);
+
   const canSpin =
-    spinState !== 'spinning' && selectedBet > 0 && balance >= selectedBet;
+    spinState !== 'spinning' &&
+    selectedBet >= 1 &&
+    balance >= selectedBet &&
+    Number.isFinite(selectedBet);
 
   const handleSpin = async () => {
     if (!canSpin) return;
+
+    // Validate bet amount before sending
+    const bet = Math.floor(Number(selectedBet));
+    if (!Number.isFinite(bet) || bet < 1 || bet > balance) {
+      setError('Invalid bet amount');
+      setSpinState('idle');
+      return;
+    }
 
     setError(null);
     setSpinState('spinning');
@@ -60,19 +82,21 @@ export function SlotsGame({ initialBalance }: { initialBalance: number }) {
       const response = await fetch('/api/games/slots/spin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ betAmount: selectedBet }),
+        body: JSON.stringify({ betAmount: bet }),
       });
 
-      const data = (await response.json()) as SpinResult;
+      const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || 'Spin failed');
+        setError((data as { error?: string }).error || 'Spin failed');
         setSpinState('idle');
         return;
       }
 
+      const spinResult = data as SpinResult;
+
       // Map server symbols to target indexes on our strip (one random index per symbol)
-      const targetIndexes: number[] = data.reels.map((symbol) => {
+      const targetIndexes: number[] = spinResult.reels.map((symbol) => {
         const matches = REEL_STRIP.map((s, i) => ({ s, i })).filter(
           (entry) => entry.s === symbol
         );
@@ -123,13 +147,13 @@ export function SlotsGame({ initialBalance }: { initialBalance: number }) {
         tick();
       });
 
-      setBalance(data.balance);
+      setBalance(spinResult.balance);
       if (user) {
-        setUser({ ...user, chip_balance: data.balance });
+        setUser({ ...user, chip_balance: spinResult.balance });
       }
-      setLastResult(data);
+      setLastResult(spinResult);
       setSpinState('result');
-      if (data.result === 'win') {
+      if (spinResult.result === 'win') {
         setHighlightWin(true);
       }
     } catch (err) {
@@ -230,64 +254,12 @@ export function SlotsGame({ initialBalance }: { initialBalance: number }) {
         {/* Controls */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-6">
           <div className="space-y-3">
-            <div className="space-y-2">
-              <div>
-                <p className="text-sm text-casino-gray-light">Bet Amount</p>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {BET_OPTIONS.map((amount) => {
-                    const isSelected = selectedBet === amount;
-                    return (
-                      <button
-                        key={amount}
-                        type="button"
-                        onClick={() => {
-                          setSelectedBet(amount);
-                          setCustomBetInput(String(amount));
-                        }}
-                        className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors duration-150 ${
-                          isSelected
-                            ? 'bg-casino-accent-primary text-casino-white'
-                            : 'bg-casino-gray-darker text-casino-white hover:bg-casino-gray-dark border border-casino-gray'
-                        }`}
-                      >
-                        {amount.toLocaleString()}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <label
-                  htmlFor="customBet"
-                  className="text-xs text-casino-gray-light"
-                >
-                  Custom
-                </label>
-                <input
-                  id="customBet"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={customBetInput}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setCustomBetInput(value);
-                    const numeric = parseInt(value, 10);
-                    if (Number.isNaN(numeric) || numeric <= 0) {
-                      setSelectedBet(0);
-                      return;
-                    }
-                    setSelectedBet(numeric);
-                  }}
-                  className="w-28 px-3 py-2 bg-casino-gray-darker border border-casino-gray rounded-lg text-casino-white font-mono text-sm placeholder:text-casino-gray-light focus:outline-none focus:border-casino-accent-primary transition-colors duration-200"
-                  placeholder="Amount"
-                />
-                <span className="text-xs text-casino-gray-light">
-                  Max {balance.toLocaleString()}
-                </span>
-              </div>
-            </div>
+            <BetSelector
+              balance={balance}
+              selectedBet={selectedBet}
+              onBetChange={setSelectedBet}
+              presetOptions={BET_OPTIONS}
+            />
 
             <div className="space-y-1">
               <p className="text-sm text-casino-gray-light">Spin Speed</p>

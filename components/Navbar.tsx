@@ -37,6 +37,14 @@ export default function Navbar() {
               >
                 Dashboard
               </Link>
+              {user.chip_balance === 0 && (
+                <Link
+                  href="/tasks"
+                  className="text-casino-gray-light hover:text-casino-white transition-colors duration-200"
+                >
+                  Tasks
+                </Link>
+              )}
               {user.is_admin && (
                 <Link
                   href="/admin"

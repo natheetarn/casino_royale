@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useUser } from '../UserProvider';
 import { brainrotLandmines } from '@/copy/brainrot';
+import { BetSelector } from './BetSelector';
 
 const DEFAULT_GRID_SIZE = 5;
 const DEFAULT_MINE_COUNT = 5;
@@ -39,7 +40,6 @@ export function LandminesGame({ initialBalance }: { initialBalance: number }) {
   const [gridSize, setGridSize] = useState(DEFAULT_GRID_SIZE);
   const [mineCount, setMineCount] = useState(DEFAULT_MINE_COUNT);
   const [selectedBet, setSelectedBet] = useState<number>(50);
-  const [customBetInput, setCustomBetInput] = useState<string>('50');
   const [session, setSession] = useState<LandminesSession | null>(null);
   const [gameState, setGameState] = useState<GameState>('idle');
   const [revealedCells, setRevealedCells] = useState<Set<number>>(new Set());
@@ -321,64 +321,12 @@ export function LandminesGame({ initialBalance }: { initialBalance: number }) {
         <div className="bg-casino-black-lighter border border-casino-gray-darker rounded-xl p-6 space-y-6 md:flex-[2] md:w-full">
           <div className="space-y-3">
             {/* Bet amount */}
-            <div className="space-y-2">
-              <div>
-                <p className="text-sm text-casino-gray-light">Bet Amount</p>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {DEFAULT_BET_OPTIONS.map((amount) => {
-                    const isSelected = selectedBet === amount;
-                    return (
-                      <button
-                        key={amount}
-                        type="button"
-                        onClick={() => {
-                          setSelectedBet(amount);
-                          setCustomBetInput(String(amount));
-                        }}
-                        className={`px-4 py-2 rounded-lg font-mono text-sm transition-colors duration-150 ${
-                          isSelected
-                            ? 'bg-casino-accent-primary text-casino-white'
-                            : 'bg-casino-gray-darker text-casino-white hover:bg-casino-gray-dark border border-casino-gray'
-                        }`}
-                      >
-                        {amount.toLocaleString()}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <label
-                  htmlFor="landminesCustomBet"
-                  className="text-xs text-casino-gray-light"
-                >
-                  Custom
-                </label>
-                <input
-                  id="landminesCustomBet"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={customBetInput}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setCustomBetInput(value);
-                    const numeric = parseInt(value, 10);
-                    if (Number.isNaN(numeric) || numeric <= 0) {
-                      setSelectedBet(0);
-                      return;
-                    }
-                    setSelectedBet(numeric);
-                  }}
-                  className="w-28 px-3 py-2 bg-casino-gray-darker border border-casino-gray rounded-lg text-casino-white font-mono text-sm placeholder:text-casino-gray-light focus:outline-none focus:border-casino-accent-primary transition-colors duration-200"
-                  placeholder="Amount"
-                />
-                <span className="text-xs text-casino-gray-light">
-                  Max {balance.toLocaleString()}
-                </span>
-              </div>
-            </div>
+            <BetSelector
+              balance={balance}
+              selectedBet={selectedBet}
+              onBetChange={setSelectedBet}
+              presetOptions={DEFAULT_BET_OPTIONS}
+            />
 
             {/* Sliders + helper text */}
             <div className="text-sm text-casino-gray-light space-y-4">

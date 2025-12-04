@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session';
 import { createServerClient } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import Link from 'next/link';
+import { getActiveGames } from '@/lib/games/registry';
 
 export default async function DashboardPage() {
   const user = await getSession();
@@ -29,6 +30,9 @@ export default async function DashboardPage() {
     .order('timestamp', { ascending: false })
     .limit(10);
 
+  // Get active games from registry
+  const activeGames = getActiveGames();
+
   return (
     <div className="min-h-screen bg-casino-black">
       <Navbar />
@@ -51,46 +55,41 @@ export default async function DashboardPage() {
           <p className="text-xs text-casino-gray-light mt-1">chips</p>
         </div>
 
+        {/* Tasks Section (only when balance = 0) */}
+        {user.chip_balance === 0 && (
+          <div className="mb-8">
+            <div className="bg-casino-black-lighter border border-casino-gray-darker rounded-xl p-6">
+              <h2 className="text-2xl font-display text-casino-white mb-2">Tedious Tasks</h2>
+              <p className="text-casino-gray-light text-sm mb-4">
+                Complete tasks to earn chips and get back in the game
+              </p>
+              <Link
+                href="/tasks"
+                className="inline-block px-6 py-3 bg-casino-accent-primary text-casino-white font-semibold rounded-lg hover:bg-red-700 active:scale-95 transition-all duration-150"
+              >
+                View Tasks
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* Games Section */}
         <div className="mb-8">
           <h2 className="text-2xl font-display text-casino-white mb-4">Games</h2>
           {/* Responsive game grid so we can keep adding titles without breaking layout */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            <Link
-              href="/games/slots"
-              className="bg-casino-black-lighter border border-casino-gray-darker rounded-xl p-6 hover:border-casino-gray-dark transition-all duration-300 hover:-translate-y-1"
-            >
-              <h3 className="text-xl font-display text-casino-white mb-2">Slots</h3>
-              <p className="text-casino-gray-light text-sm">Classic slot machine</p>
-            </Link>
-            <Link
-              href="/games/landmines"
-              className="bg-casino-black-lighter border border-casino-gray-darker rounded-xl p-6 hover:border-casino-gray-dark transition-all duration-300 hover:-translate-y-1"
-            >
-              <h3 className="text-xl font-display text-casino-white mb-2">Landmines</h3>
-              <p className="text-casino-gray-light text-sm">Avoid the mines!</p>
-            </Link>
-            <Link
-              href="/games/roulette"
-              className="bg-casino-black-lighter border border-casino-gray-darker rounded-xl p-6 hover:border-casino-gray-dark transition-all duration-300 hover:-translate-y-1"
-            >
-              <h3 className="text-xl font-display text-casino-white mb-2">Roulette</h3>
-              <p className="text-casino-gray-light text-sm">Spin the wheel of fate</p>
-            </Link>
-            <Link
-              href="/games/road-crossing"
-              className="bg-casino-black-lighter border border-casino-gray-darker rounded-xl p-6 hover:border-casino-gray-dark transition-all duration-300 hover:-translate-y-1"
-            >
-              <h3 className="text-xl font-display text-casino-white mb-2">Road Crossing</h3>
-              <p className="text-casino-gray-light text-sm">Cross the road safely</p>
-            </Link>
-            <Link
-              href="/games/baccarat"
-              className="bg-casino-black-lighter border border-casino-gray-darker rounded-xl p-6 hover:border-casino-gray-dark transition-all duration-300 hover:-translate-y-1"
-            >
-              <h3 className="text-xl font-display text-casino-white mb-2">Baccarat</h3>
-              <p className="text-casino-gray-light text-sm">Player vs Banker</p>
-            </Link>
+            {activeGames.map((game) => (
+              <Link
+                key={game.id}
+                href={game.route}
+                className="bg-casino-black-lighter border border-casino-gray-darker rounded-xl p-6 hover:border-casino-gray-dark transition-all duration-300 hover:-translate-y-1"
+              >
+                <h3 className="text-xl font-display text-casino-white mb-2">
+                  {game.emoji} {game.name}
+                </h3>
+                <p className="text-casino-gray-light text-sm">{game.description}</p>
+              </Link>
+            ))}
           </div>
         </div>
 

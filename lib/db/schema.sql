@@ -69,3 +69,39 @@ $$ language 'plpgsql';
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- Task completions table
+CREATE TABLE IF NOT EXISTS task_completions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  task_type VARCHAR(50) NOT NULL,
+  completed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  reward_amount INTEGER NOT NULL,
+  metadata JSONB,
+  CONSTRAINT valid_task_type CHECK (task_type IN ('math', 'trivia', 'captcha', 'typing', 'waiting'))
+);
+
+-- Task configuration table (admin-configurable rewards and cooldowns)
+CREATE TABLE IF NOT EXISTS task_config (
+  task_type VARCHAR(50) PRIMARY KEY,
+  reward_amount INTEGER NOT NULL DEFAULT 1000,
+  cooldown_seconds INTEGER NOT NULL DEFAULT 3600,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT valid_task_type_config CHECK (task_type IN ('math', 'trivia', 'captcha', 'typing', 'waiting'))
+);
+
+-- Indexes for task_completions
+CREATE INDEX IF NOT EXISTS idx_task_completions_user_id ON task_completions(user_id);
+CREATE INDEX IF NOT EXISTS idx_task_completions_task_type ON task_completions(task_type);
+CREATE INDEX IF NOT EXISTS idx_task_completions_completed_at ON task_completions(completed_at);
+CREATE INDEX IF NOT EXISTS idx_task_completions_user_task_time ON task_completions(user_id, task_type, completed_at);
+
+-- Insert default task configurations
+INSERT INTO task_config (task_type, reward_amount, cooldown_seconds) VALUES
+  ('math', 1000, 3600),
+  ('trivia', 750, 3600),
+  ('captcha', 500, 3600),
+  ('typing', 800, 3600),
+  ('waiting', 2000, 3600)
+ON CONFLICT (task_type) DO NOTHING;
+

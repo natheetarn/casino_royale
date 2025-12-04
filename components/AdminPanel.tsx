@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface User {
   id: string;
@@ -22,10 +22,26 @@ interface Transaction {
   users?: { username: string };
 }
 
+interface TaskConfig {
+  task_type: string;
+  reward_amount: number;
+  cooldown_seconds: number;
+  updated_at: string;
+  updated_by: string | null;
+}
+
 interface AdminPanelProps {
   users: User[];
   transactions: Transaction[];
 }
+
+const TASK_NAMES: Record<string, string> = {
+  math: 'Math Homework',
+  trivia: 'Trivia Quiz',
+  captcha: 'CAPTCHA Hell',
+  typing: 'Typing Test',
+  waiting: 'The Waiting Game',
+};
 
 export default function AdminPanel({ users: initialUsers, transactions: initialTransactions }: AdminPanelProps) {
   const [users, setUsers] = useState(initialUsers);
@@ -35,6 +51,92 @@ export default function AdminPanel({ users: initialUsers, transactions: initialT
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  // Task config state
+  const [taskConfigs, setTaskConfigs] = useState<TaskConfig[]>([]);
+  const [editingTask, setEditingTask] = useState<string | null>(null);
+  const [editReward, setEditReward] = useState('');
+  const [editCooldown, setEditCooldown] = useState('');
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configMessage, setConfigMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    fetchTaskConfigs();
+  }, []);
+
+  const fetchTaskConfigs = async () => {
+    try {
+      const res = await fetch('/api/admin/tasks/config');
+      const data = await res.json();
+      if (res.ok && data.configs) {
+        setTaskConfigs(data.configs);
+      }
+    } catch (error) {
+      console.error('Failed to fetch task configs:', error);
+    }
+  };
+
+  const handleEditTask = (task: TaskConfig) => {
+    setEditingTask(task.task_type);
+    setEditReward(task.reward_amount.toString());
+    setEditCooldown(task.cooldown_seconds.toString());
+    setConfigMessage(null);
+  };
+
+  const handleSaveTask = async (taskType: string) => {
+    const reward = parseInt(editReward, 10);
+    const cooldown = parseInt(editCooldown, 10);
+
+    if (isNaN(reward) || reward < 0) {
+      setConfigMessage({ type: 'error', text: 'Invalid reward amount' });
+      return;
+    }
+
+    if (isNaN(cooldown) || cooldown < 0) {
+      setConfigMessage({ type: 'error', text: 'Invalid cooldown seconds' });
+      return;
+    }
+
+    setConfigLoading(true);
+    setConfigMessage(null);
+
+    try {
+      const res = await fetch('/api/admin/tasks/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskType,
+          rewardAmount: reward,
+          cooldownSeconds: cooldown,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setConfigMessage({ type: 'error', text: data.error || 'Failed to update task configuration' });
+        setConfigLoading(false);
+        return;
+      }
+
+      setTaskConfigs((prev) =>
+        prev.map((t) => (t.task_type === taskType ? data.config : t))
+      );
+      setEditingTask(null);
+      setConfigMessage({ type: 'success', text: 'Task configuration updated successfully' });
+      setConfigLoading(false);
+    } catch (error) {
+      setConfigMessage({ type: 'error', text: 'An error occurred' });
+      setConfigLoading(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTask(null);
+    setEditReward('');
+    setEditCooldown('');
+    setConfigMessage(null);
+  };
 
   const handleAddChips = async () => {
     if (!selectedUser || !chipAmount) {
@@ -95,6 +197,102 @@ export default function AdminPanel({ users: initialUsers, transactions: initialT
 
   return (
     <div className="space-y-8">
+      {/* Task Configuration Section */}
+      <div className="bg-casino-black-lighter border border-casino-gray-darker rounded-xl p-6">
+        <h2 className="text-2xl font-display text-casino-white mb-4">Task Rewards & Cooldowns</h2>
+        
+        {configMessage && (
+          <div
+            className={`mb-4 px-4 py-3 rounded-lg ${
+              configMessage.type === 'success'
+                ? 'bg-casino-accent-secondary/10 border border-casino-accent-secondary text-casino-accent-secondary'
+                : 'bg-casino-accent-primary/10 border border-casino-accent-primary text-casino-accent-primary'
+            }`}
+          >
+            {configMessage.text}
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-casino-gray-darker">
+                <th className="text-left py-3 px-4 text-casino-gray-light">Task</th>
+                <th className="text-right py-3 px-4 text-casino-gray-light">Reward (chips)</th>
+                <th className="text-right py-3 px-4 text-casino-gray-light">Cooldown (seconds)</th>
+                <th className="text-left py-3 px-4 text-casino-gray-light">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {taskConfigs.map((task) => (
+                <tr key={task.task_type} className="border-b border-casino-gray-darker hover:bg-casino-gray-darker transition-colors">
+                  <td className="py-3 px-4 text-casino-white font-semibold">
+                    {TASK_NAMES[task.task_type] || task.task_type}
+                  </td>
+                  {editingTask === task.task_type ? (
+                    <>
+                      <td className="py-3 px-4">
+                        <input
+                          type="number"
+                          value={editReward}
+                          onChange={(e) => setEditReward(e.target.value)}
+                          className="w-full px-3 py-2 bg-casino-gray-darker border border-casino-gray rounded-lg text-casino-white font-mono text-right focus:outline-none focus:border-casino-accent-primary"
+                          min="0"
+                        />
+                      </td>
+                      <td className="py-3 px-4">
+                        <input
+                          type="number"
+                          value={editCooldown}
+                          onChange={(e) => setEditCooldown(e.target.value)}
+                          className="w-full px-3 py-2 bg-casino-gray-darker border border-casino-gray rounded-lg text-casino-white font-mono text-right focus:outline-none focus:border-casino-accent-primary"
+                          min="0"
+                        />
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleSaveTask(task.task_type)}
+                            disabled={configLoading}
+                            className="px-3 py-1 bg-casino-accent-secondary text-casino-white text-sm rounded hover:bg-green-600 transition-colors disabled:opacity-50"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            disabled={configLoading}
+                            className="px-3 py-1 bg-casino-gray-darker border border-casino-gray text-casino-gray-light text-sm rounded hover:bg-casino-gray-dark transition-colors disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="py-3 px-4 text-right font-mono text-casino-accent-gold">
+                        {task.reward_amount.toLocaleString()}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono text-casino-white">
+                        {task.cooldown_seconds.toLocaleString()}
+                      </td>
+                      <td className="py-3 px-4">
+                        <button
+                          onClick={() => handleEditTask(task)}
+                          className="px-3 py-1 bg-casino-accent-primary text-casino-white text-sm rounded hover:bg-red-700 transition-colors"
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Add Chips Section */}
       <div className="bg-casino-black-lighter border border-casino-gray-darker rounded-xl p-6">
         <h2 className="text-2xl font-display text-casino-white mb-4">Add Chips to User</h2>

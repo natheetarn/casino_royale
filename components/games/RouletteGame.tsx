@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useUser } from "../UserProvider";
 import { RouletteBet } from "@/lib/games/roulette";
 import { brainrotRoulette } from "@/copy/brainrot";
+import { BetSelector } from "./BetSelector";
 
 const CHIP_OPTIONS = [10, 50, 100, 500, 1000];
 
@@ -42,9 +43,6 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
   const { user, setUser } = useUser();
   const [balance, setBalance] = useState(initialBalance);
   const [selectedChip, setSelectedChip] = useState<number>(CHIP_OPTIONS[0]);
-  const [customChipInput, setCustomChipInput] = useState<string>(
-    String(CHIP_OPTIONS[0]),
-  );
   const [bets, setBets] = useState<RouletteBet[]>([]);
   const [spinState, setSpinState] = useState<SpinState>('idle');
   const [lastSpin, setLastSpin] = useState<SpinResponse | null>(null);
@@ -589,58 +587,15 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
           {/* Right: chips + current bets + actions */}
           <div className="space-y-4">
             {/* Chip selector */}
-            <div className="space-y-2">
-              <p className="text-sm text-casino-gray-light">Chips</p>
-              <div className="flex flex-wrap gap-2">
-                {CHIP_OPTIONS.map((chip) => {
-                  const isSelected = selectedChip === chip;
-                  return (
-                    <button
-                      key={chip}
-                      type="button"
-                      onClick={() => {
-                        setSelectedChip(chip);
-                        setCustomChipInput(String(chip));
-                      }}
-                      className={`px-4 py-2 rounded-full font-mono text-sm transition-colors duration-150 ${
-                        isSelected
-                          ? 'bg-casino-accent-primary text-casino-white'
-                          : 'bg-casino-gray-darker text-casino-white border border-casino-gray hover:bg-casino-gray-dark'
-                      }`}
-                    >
-                      {chip.toLocaleString()}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="flex items-center gap-3 mt-2">
-                <label
-                  htmlFor="rouletteCustomChip"
-                  className="text-xs text-casino-gray-light"
-                >
-                  Custom
-                </label>
-                <input
-                  id="rouletteCustomChip"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={customChipInput}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setCustomChipInput(value);
-                    const numeric = parseInt(value, 10);
-                    if (Number.isNaN(numeric) || numeric <= 0) {
-                      setSelectedChip(0);
-                      return;
-                    }
-                    setSelectedChip(numeric);
-                  }}
-                  className="w-24 px-3 py-2 bg-casino-gray-darker border border-casino-gray rounded-lg text-casino-white font-mono text-xs placeholder:text-casino-gray-light focus:outline-none focus:border-casino-accent-primary transition-colors duration-200"
-                  placeholder="Amount"
-                />
-              </div>
-            </div>
+            <BetSelector
+              balance={balance}
+              selectedBet={selectedChip}
+              onBetChange={setSelectedChip}
+              presetOptions={CHIP_OPTIONS}
+              showFractionButtons={true}
+              showLabel={true}
+              label="Chips"
+            />
 
             {/* Current bets list */}
             <div className="space-y-2">
