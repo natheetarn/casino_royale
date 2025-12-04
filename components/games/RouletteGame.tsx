@@ -1,9 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import Wheel from "react-roulette-pro";
-import type { PrizeType } from "react-roulette-pro";
-import "react-roulette-pro/dist/index.css";
+import { useEffect, useRef, useState } from "react";
 import { useUser } from "../UserProvider";
 import { RouletteBet } from "@/lib/games/roulette";
 import { brainrotRoulette } from "@/copy/brainrot";
@@ -20,20 +17,12 @@ const BASE_WHEEL_NUMBERS = [
   24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26,
 ];
 
-// Repeat the wheel multiple times so the strip has enough length to spin
-const WHEEL_REPEAT_COUNT = 5;
-const EXTENDED_WHEEL_NUMBERS = Array.from(
-  { length: BASE_WHEEL_NUMBERS.length * WHEEL_REPEAT_COUNT },
+// Repeat the sequence to get a long horizontal carousel to scroll through
+const CAROUSEL_REPEAT_COUNT = 7;
+const CAROUSEL_NUMBERS: number[] = Array.from(
+  { length: BASE_WHEEL_NUMBERS.length * CAROUSEL_REPEAT_COUNT },
   (_, i) => BASE_WHEEL_NUMBERS[i % BASE_WHEEL_NUMBERS.length],
 );
-
-const WHEEL_DATA = EXTENDED_WHEEL_NUMBERS.map((num, index) => {
-  return {
-    id: `${num}-${index}`,
-    image: "",
-    text: String(num),
-  };
-});
 
 type SpinState = 'idle' | 'spinning' | 'result';
 
@@ -60,10 +49,64 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
   const [spinState, setSpinState] = useState<SpinState>('idle');
   const [lastSpin, setLastSpin] = useState<SpinResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [prizeIndex, setPrizeIndex] = useState<number | null>(null);
+  const [winningIndex, setWinningIndex] = useState<number | null>(null);
+  const [spinDuration, setSpinDuration] = useState<number>(1.2); // seconds
+  const [pendingSpin, setPendingSpin] = useState<SpinResponse | null>(null);
+  const [showResultToast, setShowResultToast] = useState(false);
+
+  const carouselContainerRef = useRef<HTMLDivElement | null>(null);
+  const carouselItemRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const totalStake = bets.reduce((sum, b) => sum + b.amount, 0);
   const canSpin = spinState !== 'spinning' && bets.length > 0 && totalStake <= balance;
+
+  const centerCarousel = () => {
+    const middleIndex = Math.floor(CAROUSEL_NUMBERS.length / 2);
+    const container = carouselContainerRef.current;
+    const item = carouselItemRefs.current[middleIndex];
+    if (container && item) {
+      const itemCenter = item.offsetLeft + item.offsetWidth / 2;
+      const target = itemCenter - container.clientWidth / 2;
+      container.scrollLeft = target;
+    }
+  };
+
+  const scrollToCarouselIndex = (index: number, durationMs: number) => {
+    const container = carouselContainerRef.current;
+    const item = carouselItemRefs.current[index];
+    if (!container || !item || durationMs <= 0) return;
+
+    const startScroll = container.scrollLeft;
+    const itemCenter = item.offsetLeft + item.offsetWidth / 2;
+    const targetScroll = itemCenter - container.clientWidth / 2;
+    const distance = targetScroll - startScroll;
+
+    const startTime = performance.now();
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const step = (now: number) => {
+      const elapsed = now - startTime;
+      const t = Math.min(1, elapsed / durationMs);
+      const eased = easeOutCubic(t);
+      container.scrollLeft = startScroll + distance * eased;
+      if (t < 1) {
+        requestAnimationFrame(step);
+      }
+    };
+
+    requestAnimationFrame(step);
+  };
+
+  useEffect(() => {
+    centerCarousel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!showResultToast) return;
+    const id = setTimeout(() => setShowResultToast(false), 2500);
+    return () => clearTimeout(id);
+  }, [showResultToast]);
 
   const addOrIncrementBet = (bet: RouletteBet) => {
     setBets((prev) => {
@@ -110,9 +153,10 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
   const handleSpin = async () => {
     if (!canSpin) return;
     setError(null);
-    setPrizeIndex(null);
+    setWinningIndex(null);
     setSpinState('spinning');
     setLastSpin(null);
+    setPendingSpin(null);
 
     try {
       const res = await fetch('/api/games/roulette/spin', {
@@ -129,20 +173,46 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
         return;
       }
 
-      // Map winning number to a prize index in the *extended* wheel strip.
-      // We stop around the middle repeat so the wheel has room to scroll in.
+      // Map winning number to an index in the extended carousel strip.
+      // Start from an early repeat, then animate towards a later repeat so it
+      // visibly travels across multiple pockets before stopping.
       const baseIndex = BASE_WHEEL_NUMBERS.indexOf(data.winningNumber);
       const safeBaseIndex = baseIndex >= 0 ? baseIndex : 0;
-      const middleRepeat = Math.floor(WHEEL_REPEAT_COUNT / 2);
-      const prizeIdx = middleRepeat * BASE_WHEEL_NUMBERS.length + safeBaseIndex;
-      setPrizeIndex(prizeIdx);
+      const startRepeat = 1;
+      const targetRepeat = CAROUSEL_REPEAT_COUNT - 2;
+      const startIndex = startRepeat * BASE_WHEEL_NUMBERS.length + safeBaseIndex;
+      const targetIndex =
+        targetRepeat * BASE_WHEEL_NUMBERS.length + safeBaseIndex;
 
-      setLastSpin(data);
+      // Jump near the start of the strip without animation
+      const container = carouselContainerRef.current;
+      const startItem = carouselItemRefs.current[startIndex];
+      if (container && startItem) {
+        const itemCenter = startItem.offsetLeft + startItem.offsetWidth / 2;
+        const target = itemCenter - container.clientWidth / 2;
+        container.scrollLeft = target;
+      }
+
+      // Then smoothly scroll a long distance to the target
+      setWinningIndex(targetIndex);
+      setTimeout(() => {
+        scrollToCarouselIndex(targetIndex, spinDuration * 1000);
+      }, 30);
+
+      // Defer result display until after animation finishes
+      setPendingSpin(data);
       setBalance(data.balance);
       if (user) {
         setUser({ ...user, chip_balance: data.balance });
       }
       setBets([]);
+
+      // Result styling & toast are driven after scroll settles
+      setTimeout(() => {
+        setLastSpin(data);
+        setSpinState('result');
+        setShowResultToast(true);
+      }, spinDuration * 1000 + 120);
     } catch (err) {
       console.error(err);
       setError('Something went wrong. Please try again.');
@@ -213,54 +283,75 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
     }
   };
 
-  const renderWheelPocket = (prize: PrizeType) => {
-    const numeric = Number(prize.text ?? prize.id);
-    const isZero = numeric === 0;
-    const isRed = !isZero && RED_NUMBERS.includes(numeric);
-
-    const backgroundColor = isZero
-      ? "#16a34a" // green-600
-      : isRed
-      ? "#b91c1c" // red-700
-      : "#020617"; // slate-950
-
-    return (
-      <div
-        style={{
-          backgroundColor,
-          color: "#f9fafb",
-          paddingInline: "16px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          height: "100%",
-          width: "100%",
-          fontSize: "11px",
-          fontFamily: "monospace",
-          borderLeft: "1px solid rgba(15,23,42,0.8)",
-          borderRight: "1px solid rgba(15,23,42,0.8)",
-        }}
-      >
-        {prize.text}
-      </div>
-    );
-  };
-
   return (
     <div className="space-y-8">
+      {/* Lightweight result toast */}
+      {showResultToast && lastSpin && (
+        <div className="pointer-events-none fixed top-20 inset-x-0 z-30 flex justify-center">
+          <div
+            className={`pointer-events-auto max-w-md rounded-xl px-4 py-3 shadow-xl shadow-black/60 border text-sm ${
+              lastSpin.net > 0
+                ? 'bg-casino-accent-secondary/10 border-casino-accent-secondary text-casino-accent-secondary'
+                : lastSpin.net < 0
+                ? 'bg-casino-accent-primary/10 border-casino-accent-primary text-casino-accent-primary'
+                : 'bg-casino-gray-darker/90 border-casino-gray text-casino-gray-light'
+            }`}
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-casino-gray-light">
+                  Result
+                </span>
+                <span className="text-base md:text-lg font-mono">
+                  {lastSpin.winningNumber}{' '}
+                  <span className="text-xs md:text-sm text-casino-gray-light">
+                    ({lastSpin.winningColor.toUpperCase()})
+                  </span>
+                </span>
+              </div>
+              <div className="text-xs md:text-sm text-right">
+                {lastSpin.net > 0
+                  ? brainrotRoulette.resultWin(
+                      lastSpin.net,
+                      lastSpin.winningNumber,
+                      lastSpin.winningColor,
+                    )
+                  : lastSpin.net < 0
+                  ? brainrotRoulette.resultLoss(lastSpin.totalStake)
+                  : brainrotRoulette.resultTie()}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-4xl font-display text-casino-white">Roulette</h1>
           <p className="text-sm text-casino-gray-light mt-1">
             {brainrotRoulette.helper()}
           </p>
         </div>
-        <div className="text-right">
-          <p className="text-sm text-casino-gray-light">Balance</p>
-          <p className="text-2xl font-mono text-casino-accent-gold">
-            {balance.toLocaleString()}
-          </p>
+        <div className="flex flex-col items-end gap-2">
+          <div className="text-right">
+            <p className="text-sm text-casino-gray-light">Balance</p>
+            <p className="text-2xl font-mono text-casino-accent-gold">
+              {balance.toLocaleString()}
+            </p>
+          </div>
+          {lastSpin && (
+            <div className="inline-flex items-baseline gap-2 rounded-lg border border-casino-gray-darker bg-casino-black-lighter/70 px-3 py-2">
+              <span className="text-[10px] uppercase tracking-[0.18em] text-casino-gray-light">
+                Result
+              </span>
+              <span className="text-base md:text-lg font-mono text-casino-accent-gold">
+                {lastSpin.winningNumber}{" "}
+                <span className="text-xs md:text-sm text-casino-gray-light">
+                  ({lastSpin.winningColor.toUpperCase()})
+                </span>
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -269,31 +360,61 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
         <div className="md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] md:gap-6 space-y-6 md:space-y-0">
           {/* Left: wheel + table */}
           <div className="space-y-4">
-            {/* Wheel */}
+            {/* Wheel carousel */}
             <div className="flex justify-center">
-              <div className="relative h-64 w-full max-w-md flex items-center justify-center overflow-hidden">
-                <Wheel
-                  start={prizeIndex !== null}
-                  prizeIndex={prizeIndex ?? 0}
-                  prizes={WHEEL_DATA}
-                  spinningTime={3.5}
-                  transitionFunction="ease-out"
-                  onPrizeDefined={() => {
-                    setSpinState("result");
-                  }}
-                  prizeItemRenderFunction={renderWheelPocket}
-                  defaultDesignOptions={{
-                    prizesWithText: false,
-                    hideCenterDelimiter: false,
-                  }}
-                  options={{
-                    stopInCenter: true,
-                  }}
-                />
-                {/* Fixed pointer overlay */}
-                <div className="pointer-events-none absolute -top-1 left-1/2 -translate-x-1/2">
-                  <div className="h-4 w-4 rotate-180">
-                    <div className="h-0 w-0 border-l-[8px] border-r-[8px] border-b-[10px] border-l-transparent border-r-transparent border-b-casino-accent-gold drop-shadow-[0_0_6px_rgba(250,204,21,0.8)]" />
+              <div className="relative h-32 w-full max-w-md">
+                {/* Fixed pointer */}
+                <div className="pointer-events-none absolute inset-y-0 left-1/2 -translate-x-1/2 flex items-center z-20">
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="w-0 h-0 border-l-[6px] border-r-[6px] border-b-[8px] border-l-transparent border-r-transparent border-b-casino-accent-gold drop-shadow-[0_0_8px_rgba(250,204,21,0.9)]" />
+                    <div className="w-[2px] h-24 rounded-full bg-casino-accent-gold shadow-[0_0_12px_rgba(250,204,21,0.8)]" />
+                  </div>
+                </div>
+
+                {/* Number strip */}
+                <div
+                  ref={carouselContainerRef}
+                  className="absolute inset-0 overflow-hidden z-10"
+                >
+                  <div className="flex h-full items-stretch gap-[2px] px-6">
+                    {CAROUSEL_NUMBERS.map((num, index) => {
+                      const isZero = num === 0;
+                      const isRed = !isZero && RED_NUMBERS.includes(num);
+                      const isWinningSegment =
+                        winningIndex === index && spinState === 'result';
+
+                      const backgroundColor = isZero
+                        ? '#16a34a'
+                        : isRed
+                        ? '#b91c1c'
+                        : '#020617';
+
+                      return (
+                        <div
+                          key={`${num}-${index}`}
+                          ref={(el) => {
+                            carouselItemRefs.current[index] = el;
+                          }}
+                          className="flex items-center justify-center min-w-[42px] h-full rounded-sm"
+                          style={{
+                            backgroundColor,
+                            color: '#f9fafb',
+                            borderLeft: '1px solid rgba(15,23,42,0.8)',
+                            borderRight: '1px solid rgba(15,23,42,0.8)',
+                            boxShadow: isWinningSegment
+                              ? '0 0 14px rgba(250,204,21,0.8)'
+                              : 'none',
+                            transform: isWinningSegment ? 'scale(1.05)' : 'scale(1)',
+                            transition:
+                              'transform 0.15s ease-out, box-shadow 0.15s ease-out',
+                            fontSize: '11px',
+                            fontFamily: 'monospace',
+                          }}
+                        >
+                          {num}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -315,9 +436,17 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
                 <span className="block text-[10px] font-mono opacity-80">
                   1:1
                 </span>
-                {bets.some((b) => b.type === 'color' && b.value === 'red') && (
-                  <span className="absolute top-0 right-0 mt-0.5 mr-0.5 h-1.5 w-1.5 rounded-full bg-casino-accent-gold" />
-                )}
+                {(() => {
+                  const total = bets
+                    .filter((b) => b.type === 'color' && b.value === 'red')
+                    .reduce((sum, b) => sum + b.amount, 0);
+                  if (!total) return null;
+                  return (
+                    <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-full bg-casino-black/80 text-[10px] font-mono text-casino-accent-gold border border-casino-gray">
+                      {total.toLocaleString()}
+                    </span>
+                  );
+                })()}
               </button>
               <button
                 type="button"
@@ -333,9 +462,17 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
                 <span className="block text-[10px] font-mono opacity-80">
                   1:1
                 </span>
-                {bets.some((b) => b.type === 'color' && b.value === 'black') && (
-                  <span className="absolute top-0 right-0 mt-0.5 mr-0.5 h-1.5 w-1.5 rounded-full bg-casino-accent-gold" />
-                )}
+                {(() => {
+                  const total = bets
+                    .filter((b) => b.type === 'color' && b.value === 'black')
+                    .reduce((sum, b) => sum + b.amount, 0);
+                  if (!total) return null;
+                  return (
+                    <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-full bg-casino-black/80 text-[10px] font-mono text-casino-accent-gold border border-casino-gray">
+                      {total.toLocaleString()}
+                    </span>
+                  );
+                })()}
               </button>
               <button
                 type="button"
@@ -351,6 +488,17 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
                 <span className="block text-[10px] font-mono opacity-80">
                   1:1
                 </span>
+                {(() => {
+                  const total = bets
+                    .filter((b) => b.type === 'odd_even' && b.value === 'odd')
+                    .reduce((sum, b) => sum + b.amount, 0);
+                  if (!total) return null;
+                  return (
+                    <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-full bg-casino-black/80 text-[10px] font-mono text-casino-accent-gold border border-casino-gray">
+                      {total.toLocaleString()}
+                    </span>
+                  );
+                })()}
               </button>
               <button
                 type="button"
@@ -366,6 +514,17 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
                 <span className="block text-[10px] font-mono opacity-80">
                   1:1
                 </span>
+                {(() => {
+                  const total = bets
+                    .filter((b) => b.type === 'odd_even' && b.value === 'even')
+                    .reduce((sum, b) => sum + b.amount, 0);
+                  if (!total) return null;
+                  return (
+                    <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-full bg-casino-black/80 text-[10px] font-mono text-casino-accent-gold border border-casino-gray">
+                      {total.toLocaleString()}
+                    </span>
+                  );
+                })()}
               </button>
               <button
                 type="button"
@@ -381,6 +540,17 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
                 <span className="block text-[10px] font-mono opacity-80">
                   1:1
                 </span>
+                {(() => {
+                  const total = bets
+                    .filter((b) => b.type === 'low_high' && b.value === 'low')
+                    .reduce((sum, b) => sum + b.amount, 0);
+                  if (!total) return null;
+                  return (
+                    <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-full bg-casino-black/80 text-[10px] font-mono text-casino-accent-gold border border-casino-gray">
+                      {total.toLocaleString()}
+                    </span>
+                  );
+                })()}
               </button>
               <button
                 type="button"
@@ -396,6 +566,17 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
                 <span className="block text-[10px] font-mono opacity-80">
                   1:1
                 </span>
+                {(() => {
+                  const total = bets
+                    .filter((b) => b.type === 'low_high' && b.value === 'high')
+                    .reduce((sum, b) => sum + b.amount, 0);
+                  if (!total) return null;
+                  return (
+                    <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-full bg-casino-black/80 text-[10px] font-mono text-casino-accent-gold border border-casino-gray">
+                      {total.toLocaleString()}
+                    </span>
+                  );
+                })()}
               </button>
             </div>
 
@@ -497,14 +678,38 @@ export function RouletteGame({ initialBalance }: { initialBalance: number }) {
               )}
             </div>
 
-            {/* Totals & actions */}
-            <div className="flex flex-col items-end gap-2">
-              <div className="text-sm text-casino-gray-light">
-                Total stake:{' '}
-                <span className="font-mono text-casino-white">
-                  {totalStake.toLocaleString()}
-                </span>{' '}
-                chips
+            {/* Totals, spin speed & actions */}
+            <div className="flex flex-col items-end gap-3 w-full">
+              <div className="flex flex-col items-end gap-1 w-full">
+                <div className="text-sm text-casino-gray-light">
+                  Total stake:{' '}
+                  <span className="font-mono text-casino-white">
+                    {totalStake.toLocaleString()}
+                  </span>{' '}
+                  chips
+                </div>
+                <div className="w-full">
+                  <div className="flex items-center justify-between text-[11px] text-casino-gray-light mb-1">
+                    <span>Spin duration</span>
+                    <span className="font-mono text-casino-gray-light">
+                      {spinDuration.toFixed(1)}s
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={3}
+                    step={0.1}
+                    value={spinDuration}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      if (Number.isNaN(v)) return;
+                      setSpinDuration(Math.min(3, Math.max(0.5, v)));
+                    }}
+                    className="w-full accent-casino-accent-primary"
+                    disabled={spinState === 'spinning'}
+                  />
+                </div>
               </div>
               <div className="flex gap-2">
                 <button
