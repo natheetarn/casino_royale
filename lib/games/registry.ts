@@ -32,6 +32,14 @@ export const GAME_REGISTRY: GameMetadata[] = [
     emoji: '🎲',
     status: 'active',
   },
+  {
+    id: 'crash',
+    name: 'Crash',
+    description: 'Ride the multiplier and cash out before it crashes',
+    route: '/games/crash',
+    emoji: '📈',
+    status: 'active',
+  },
 ];
 
 export function getAllGames(): GameMetadata[] {

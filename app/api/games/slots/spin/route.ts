@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { createServerClient } from '@/lib/supabase';
+import { createApiTimer } from '@/lib/logging';
 
 const MIN_BET = 1;
 const MAX_BET = 1_000_000;
@@ -78,10 +79,19 @@ function calculatePayout(bet: number, reels: SymbolType[]) {
 }
 
 export async function POST(request: NextRequest) {
+  const timer = createApiTimer({
+    path: request.nextUrl.pathname,
+    method: request.method,
+  });
+
+  let userId: string | undefined;
+
   try {
     const user = await getSession();
+    userId = user?.id;
 
     if (!user) {
+      timer(401, { reason: 'unauthorized' });
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -89,6 +99,7 @@ export async function POST(request: NextRequest) {
 
     const bet = Number(betAmount);
     if (!Number.isFinite(bet) || bet < MIN_BET || bet > MAX_BET) {
+      timer(400, { reason: 'invalid_bet_amount', bet });
       return NextResponse.json(
         { error: 'Invalid bet amount' },
         { status: 400 }
@@ -98,13 +109,23 @@ export async function POST(request: NextRequest) {
     const supabase = createServerClient();
 
     // Get latest user balance from DB
+    const balanceStart = Date.now();
     const { data: currentUser, error: userError } = await supabase
       .from('users')
       .select('id, chip_balance')
       .eq('id', user.id)
       .single();
+    console.log(
+      JSON.stringify({
+        type: 'db_timing',
+        op: 'slots_fetch_user',
+        durationMs: Date.now() - balanceStart,
+        userId,
+      }),
+    );
 
     if (userError || !currentUser) {
+      timer(404, { reason: 'user_not_found', userId });
       return NextResponse.json(
         { error: 'User not found' },
         { status: 404 }
@@ -112,6 +133,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (currentUser.chip_balance < bet) {
+      timer(400, { reason: 'insufficient_balance', userId, bet, balance: currentUser.chip_balance });
       return NextResponse.json(
         { error: 'Insufficient balance' },
         { status: 400 }
@@ -130,44 +152,86 @@ export async function POST(request: NextRequest) {
     const newBalance = currentUser.chip_balance + net;
 
     // Update user balance
+    const updateStart = Date.now();
     const { error: updateError } = await supabase
       .from('users')
       .update({ chip_balance: newBalance })
       .eq('id', user.id);
+    console.log(
+      JSON.stringify({
+        type: 'db_timing',
+        op: 'slots_update_balance',
+        durationMs: Date.now() - updateStart,
+        userId,
+      }),
+    );
 
     if (updateError) {
+      timer(500, { reason: 'update_balance_failed', userId, error: updateError.message });
       return NextResponse.json(
         { error: 'Failed to update balance' },
         { status: 500 }
       );
     }
 
-    // Record transaction
-    const { error: txError } = await supabase.from('transactions').insert({
-      user_id: user.id,
-      game_type: 'slots',
-      amount: net,
-      balance_after: newBalance,
-      reason: 'Slots spin',
-    });
-
-    if (txError) {
-      // Not critical, but log on server
-      console.error('Slots transaction error:', txError);
+    // Record transaction (non‑critical)
+    try {
+      const txStart = Date.now();
+      const { error: txError } = await supabase.from('transactions').insert({
+        user_id: user.id,
+        game_type: 'slots',
+        amount: net,
+        balance_after: newBalance,
+        reason: 'Slots spin',
+      });
+      console.log(
+        JSON.stringify({
+          type: 'db_timing',
+          op: 'slots_insert_transaction',
+          durationMs: Date.now() - txStart,
+          userId,
+          hasError: !!txError,
+        }),
+      );
+      if (txError) {
+        console.error('Slots transaction error:', txError);
+      }
+    } catch (e) {
+      console.error('Slots transaction exception:', e);
     }
 
-    // Record game history
-    const { error: historyError } = await supabase.from('game_history').insert({
-      user_id: user.id,
-      game_type: 'slots',
-      bet_amount: bet,
+    // Record game history (non‑critical)
+    try {
+      const historyStart = Date.now();
+      const { error: historyError } = await supabase.from('game_history').insert({
+        user_id: user.id,
+        game_type: 'slots',
+        bet_amount: bet,
+        result,
+        winnings: net,
+      });
+      console.log(
+        JSON.stringify({
+          type: 'db_timing',
+          op: 'slots_insert_history',
+          durationMs: Date.now() - historyStart,
+          userId,
+          hasError: !!historyError,
+        }),
+      );
+      if (historyError) {
+        console.error('Slots history error:', historyError);
+      }
+    } catch (e) {
+      console.error('Slots history exception:', e);
+    }
+
+    timer(200, {
+      userId,
+      bet,
+      net,
       result,
-      winnings: net,
     });
-
-    if (historyError) {
-      console.error('Slots history error:', historyError);
-    }
 
     return NextResponse.json({
       success: true,
@@ -180,6 +244,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Slots spin error:', error);
+    timer(500, {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

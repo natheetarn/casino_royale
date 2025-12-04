@@ -49,7 +49,7 @@ async function createAdmin(username, email, password) {
         username,
         email,
         password_hash: passwordHash,
-        chip_balance: 10000,
+        chip_balance: 1000000,
         is_admin: true,
       })
       .select()

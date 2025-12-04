@@ -6,7 +6,7 @@ import { RouletteBet } from "@/lib/games/roulette";
 import { brainrotRoulette } from "@/copy/brainrot";
 import { BetSelector } from "./BetSelector";
 
-const CHIP_OPTIONS = [10, 50, 100, 500, 1000];
+const CHIP_OPTIONS = [1_000, 5_000, 10_000, 50_000, 100_000];
 
 const RED_NUMBERS = [
   1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36,

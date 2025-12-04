@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/session';
 import { createServerClient } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
+import { DailyBonus } from '@/components/DailyBonus';
 import Link from 'next/link';
 import { getActiveGames } from '@/lib/games/registry';
 
@@ -49,10 +50,13 @@ export default async function DashboardPage() {
           <p className="text-sm text-casino-gray-light uppercase tracking-wide">
             Your Balance
           </p>
-          <p className="text-4xl font-mono text-casino-accent-gold mt-2">
+          <p className="text-4xl md:text-5xl font-mono text-casino-accent-gold mt-2">
             {user.chip_balance.toLocaleString()}
           </p>
           <p className="text-xs text-casino-gray-light mt-1">chips</p>
+
+          {/* Daily bonus claim */}
+          <DailyBonus />
         </div>
 
         {/* Tasks Section (only when balance = 0) */}

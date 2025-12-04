@@ -7,7 +7,7 @@ import { BetSelector } from './BetSelector';
 
 const DEFAULT_GRID_SIZE = 5;
 const DEFAULT_MINE_COUNT = 5;
-const DEFAULT_BET_OPTIONS = [10, 50, 100, 500, 1000];
+const DEFAULT_BET_OPTIONS = [1_000, 5_000, 10_000, 50_000, 100_000];
 
 type GameState = 'idle' | 'in-progress' | 'hit-mine' | 'cashed-out';
 

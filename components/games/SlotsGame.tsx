@@ -5,7 +5,7 @@ import { useUser } from '../UserProvider';
 import { brainrotSlots } from '@/copy/brainrot';
 import { BetSelector } from './BetSelector';
 
-const BET_OPTIONS = [10, 50, 100, 500, 1000];
+const BET_OPTIONS = [1_000, 5_000, 10_000, 50_000, 100_000];
 
 // Fixed symbol strip per reel (circular)
 const REEL_STRIP = [

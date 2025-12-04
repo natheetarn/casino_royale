@@ -4,8 +4,9 @@ CREATE TABLE IF NOT EXISTS users (
   username VARCHAR(50) UNIQUE NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  chip_balance INTEGER DEFAULT 10000 NOT NULL,
+  chip_balance INTEGER DEFAULT 1000000 NOT NULL,
   is_admin BOOLEAN DEFAULT FALSE NOT NULL,
+  last_daily_bonus_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
@@ -65,10 +66,6 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Trigger to automatically update updated_at
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 -- Task completions table
 CREATE TABLE IF NOT EXISTS task_completions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -89,6 +86,21 @@ CREATE TABLE IF NOT EXISTS task_config (
   updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
   CONSTRAINT valid_task_type_config CHECK (task_type IN ('math', 'trivia', 'captcha', 'typing', 'waiting'))
 );
+
+-- Crash game rounds
+CREATE TABLE IF NOT EXISTS crash_rounds (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  bet_amount INTEGER NOT NULL,
+  crash_multiplier NUMERIC(6, 2) NOT NULL,
+  started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  cashed_out_at NUMERIC(6, 2),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_crash_rounds_user_id ON crash_rounds(user_id);
+CREATE INDEX IF NOT EXISTS idx_crash_rounds_active ON crash_rounds(is_active);
 
 -- Indexes for task_completions
 CREATE INDEX IF NOT EXISTS idx_task_completions_user_id ON task_completions(user_id);

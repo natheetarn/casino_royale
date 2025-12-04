@@ -18,7 +18,7 @@ export function BetSelector({
   balance,
   selectedBet,
   onBetChange,
-  presetOptions = [10, 50, 100, 500, 1000],
+  presetOptions = [1_000, 5_000, 10_000, 50_000, 100_000],
   showCustom = true,
   showFractionButtons = true,
   showLabel = true,
@@ -45,11 +45,11 @@ export function BetSelector({
   };
 
   const handlePresetBet = (amount: number) => {
-    const bet = Math.max(1, Math.min(amount, balance)); // Ensure at least 1
-    if (bet > 0 && bet <= balance) {
-      onBetChange(bet);
-      setCustomBetInput(String(bet));
-    }
+    // Preset represents the intended bet; actual ability to use it
+    // is constrained by balance and canSpin logic in the game.
+    if (amount <= 0 || amount > balance) return;
+    onBetChange(amount);
+    setCustomBetInput(String(amount));
   };
 
   const handleCustomInputChange = (value: string) => {
@@ -123,9 +123,8 @@ export function BetSelector({
         {/* Preset Options */}
         <div className="flex flex-wrap gap-2">
           {presetOptions.map((amount) => {
-            const bet = Math.min(amount, balance);
-            const isSelected = selectedBet === bet;
-            const isDisabled = bet <= 0 || bet > balance;
+            const isSelected = selectedBet === amount;
+            const isDisabled = amount <= 0 || amount > balance;
 
             return (
               <button
