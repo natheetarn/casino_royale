@@ -15,6 +15,11 @@ Private casino website for 3-4 friends. No real money, just fun competition with
   - [ ] Users table (id, username, email, password_hash, chip_balance, created_at)
   - [ ] Transactions table (id, user_id, game_type, amount, balance_after, timestamp)
   - [ ] Game_history table (id, user_id, game_type, bet_amount, result, winnings, timestamp)
+  - [ ] Leaderboard table (id, user_id, balance, rank, last_updated)
+  - [ ] Achievements table (id, user_id, achievement_type, achievement_data, unlocked_at)
+  - [ ] Daily_challenges table (id, date, game_type, starting_balance, end_time, prize_pool)
+  - [ ] Challenge_entries table (id, challenge_id, user_id, final_balance, entries_count, completed_at)
+  - [ ] Challenge_winners table (id, challenge_id, user_id, rank, prize_awarded)
 - [ ] Set up environment variables (.env.local)
 
 ### Authentication System
@@ -158,10 +163,60 @@ Private casino website for 3-4 friends. No real money, just fun competition with
 
 ### Competitive Features
 - [ ] Global leaderboard (richest players)
+  - [ ] Real-time balance tracking
+  - [ ] Top 10 players display
+  - [ ] Historical balance graphs
+  - [ ] Player profiles with stats
 - [ ] Biggest win leaderboard
+  - [ ] Single largest win tracking
+  - [ ] Daily/weekly/monthly biggest wins
+  - [ ] Win screenshots/replay feature
 - [ ] Most games played stats
+  - [ ] Games per day/week/month tracking
+  - [ ] Time spent playing statistics
+  - [ ] Favorite game statistics
 - [ ] Achievement system
+  - [ ] Win streak achievements
+  - [ ] Total winnings milestones
+  - [ ] Game-specific achievements
+  - [ ] Badge/trophy display
 - [ ] Friend challenges
+  - [ ] Direct challenge system
+  - [ ] Head-to-head competitions
+  - [ ] Challenge results tracking
+
+### Daily Challenges & Tournaments
+- [ ] Daily challenge system
+  - [ ] Rotating daily game selection (Slots, Landmines, Crash, Roulette, etc.)
+  - [ ] Fixed starting balance for all participants (e.g., 10,000 chips)
+  - [ ] 24-hour competition period
+  - [ ] Real-time leaderboard for daily challenge
+  - [ ] Prize distribution (chips/badges)
+- [ ] Challenge mechanics
+  - [ ] Separate challenge balance (doesn't affect main balance)
+  - [ ] Play until bankrupt or time runs out
+  - [ ] Highest final balance wins
+  - [ ] Multiple strategies: cash out early vs risk it all
+  - [ ] Participation tracking and streak bonuses
+- [ ] Tournament types
+  - [ ] Daily High Roller (starting balance: 50,000)
+  - [ ] Daily Survival (last player standing wins)
+  - [ ] Daily Speed Run (most profit in 1 hour)
+  - [ ] Weekly Championship (cumulative daily scores)
+- [ ] Challenge features
+  - [ ] Challenge history and past winners
+  - [ ] Replays of top performances
+  - [ ] Challenge-specific chat/discussion
+  - [ ] Achievement unlocks for challenge wins
+  - [ ] Seasonal events and special challenges
+- [ ] Challenge infrastructure
+  - [ ] Database schema for challenges
+    - [ ] Daily challenges table (date, game_type, starting_balance, participants)
+    - [ ] Challenge entries table (user_id, challenge_id, final_balance, timestamp)
+    - [ ] Challenge winners table (user_id, challenge_id, rank, prize)
+  - [ ] Automated challenge rotation system
+  - [ ] Real-time score updates
+  - [ ] Anti-cheat validation for challenge results
 
 ---
 
