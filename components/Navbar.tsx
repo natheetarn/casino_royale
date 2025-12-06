@@ -37,6 +37,12 @@ export default function Navbar() {
               >
                 Dashboard
               </Link>
+              <Link
+                href="/leaderboard"
+                className="text-casino-gray-light hover:text-casino-white transition-colors duration-200"
+              >
+                🏆 Leaderboard
+              </Link>
               {user.chip_balance === 0 && (
                 <Link
                   href="/tasks"

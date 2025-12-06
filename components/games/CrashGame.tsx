@@ -12,12 +12,12 @@ export function CrashGame({ initialBalance }: { initialBalance: number }) {
   const [multiplier, setMultiplier] = useState(1.00);
   const [crashed, setCrashed] = useState(false);
   const [running, setRunning] = useState(false);
-  const [cashedOutAt, setCashedOutAt] = useState(null);
+  const [cashedOutAt, setCashedOutAt] = useState<number | null>(null);
   const [crashPoint, setCrashPoint] = useState(0);
-  const [graphData, setGraphData] = useState([]);
+  const [graphData, setGraphData] = useState<{x: number, y: number}[]>([]);
 
-  const requestRef = useRef();
-  const startTimeRef = useRef();
+  const requestRef = useRef<number | undefined>(undefined);
+  const startTimeRef = useRef<number | undefined>(undefined);
   const graphContainerRef = useRef(null);
 
   const generateCrashPoint = () => {
@@ -52,6 +52,7 @@ export function CrashGame({ initialBalance }: { initialBalance: number }) {
 
   const animate = () => {
     const now = Date.now()
+    if (!startTimeRef.current) return;
     const timeElapsed = (now - startTimeRef.current) / 1000
 
     const currentMultiplier = Math.exp(0.15 * timeElapsed)
@@ -66,8 +67,10 @@ export function CrashGame({ initialBalance }: { initialBalance: number }) {
     }
   }
 
-  const crash = (finalValue) => {
-    cancelAnimationFrame(requestRef.current)
+  const crash = (finalValue: number) => {
+    if (requestRef.current) {
+      cancelAnimationFrame(requestRef.current)
+    }
     setMultiplier(finalValue)
     setCrashed(true)
     setRunning(false)
@@ -86,7 +89,11 @@ export function CrashGame({ initialBalance }: { initialBalance: number }) {
   }
 
   useEffect(() => {
-    return () => cancelAnimationFrame(requestRef.current)
+    return () => {
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current)
+      }
+    }
   }, [])
 
   // Calculate SVG path
@@ -162,11 +169,18 @@ export function CrashGame({ initialBalance }: { initialBalance: number }) {
               />
 
               {/* Fill area under graph */}
-              <path
-                d={`${getPath()} L ${getPath().split(' ').pop().split(',')[0]},300 L 20,300 Z`}
-                fill={crashed ? 'rgba(244, 63, 94, 0.2)' : 'rgba(16, 185, 129, 0.2)'}
-                stroke="none"
-              />
+              {(() => {
+                const path = getPath();
+                if (!path) return null;
+                const lastPoint = path.split(' ').pop()?.split(',')[0];
+                return lastPoint ? (
+                  <path
+                    d={`${path} L ${lastPoint},300 L 20,300 Z`}
+                    fill={crashed ? 'rgba(244, 63, 94, 0.2)' : 'rgba(16, 185, 129, 0.2)'}
+                    stroke="none"
+                  />
+                ) : null;
+              })()}
             </svg>
 
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-5xl md:text-7xl font-bold font-mono">

@@ -117,3 +117,161 @@ INSERT INTO task_config (task_type, reward_amount, cooldown_seconds) VALUES
   ('waiting', 2000, 3600)
 ON CONFLICT (task_type) DO NOTHING;
 
+-- Leaderboard table (cached rankings for performance)
+CREATE TABLE IF NOT EXISTS leaderboard (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  balance INTEGER NOT NULL,
+  rank INTEGER NOT NULL,
+  last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  UNIQUE(user_id)
+);
+
+-- Achievements table
+CREATE TABLE IF NOT EXISTS achievements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  achievement_type VARCHAR(50) NOT NULL,
+  achievement_data JSONB,
+  unlocked_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  CONSTRAINT valid_achievement_type CHECK (achievement_type IN ('win_streak', 'total_winnings', 'biggest_win', 'games_played', 'challenge_win', 'daily_winner', 'weekly_champion'))
+);
+
+-- Daily challenges table
+CREATE TABLE IF NOT EXISTS daily_challenges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  date DATE UNIQUE NOT NULL,
+  game_type VARCHAR(50) NOT NULL,
+  starting_balance INTEGER NOT NULL DEFAULT 10000,
+  end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+  prize_pool INTEGER NOT NULL DEFAULT 50000,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  CONSTRAINT valid_game_type CHECK (game_type IN ('slots', 'landmines', 'crash', 'roulette', 'baccarat'))
+);
+
+-- Challenge entries table
+CREATE TABLE IF NOT EXISTS challenge_entries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  challenge_id UUID NOT NULL REFERENCES daily_challenges(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  final_balance INTEGER NOT NULL DEFAULT 0,
+  entries_count INTEGER NOT NULL DEFAULT 1,
+  completed_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  UNIQUE(challenge_id, user_id)
+);
+
+-- Challenge winners table
+CREATE TABLE IF NOT EXISTS challenge_winners (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  challenge_id UUID NOT NULL REFERENCES daily_challenges(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  rank INTEGER NOT NULL,
+  prize_awarded INTEGER NOT NULL,
+  awarded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  UNIQUE(challenge_id, user_id)
+);
+
+-- User statistics table (for tracking various metrics)
+CREATE TABLE IF NOT EXISTS user_stats (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  total_winnings INTEGER NOT NULL DEFAULT 0,
+  total_losses INTEGER NOT NULL DEFAULT 0,
+  games_played INTEGER NOT NULL DEFAULT 0,
+  biggest_win INTEGER NOT NULL DEFAULT 0,
+  longest_win_streak INTEGER NOT NULL DEFAULT 0,
+  current_win_streak INTEGER NOT NULL DEFAULT 0,
+  time_played_minutes INTEGER NOT NULL DEFAULT 0,
+  last_active_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+  UNIQUE(user_id)
+);
+
+-- Indexes for leaderboard and challenges
+CREATE INDEX IF NOT EXISTS idx_leaderboard_balance ON leaderboard(balance DESC);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_rank ON leaderboard(rank);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_updated ON leaderboard(last_updated);
+
+CREATE INDEX IF NOT EXISTS idx_achievements_user_id ON achievements(user_id);
+CREATE INDEX IF NOT EXISTS idx_achievements_type ON achievements(achievement_type);
+CREATE INDEX IF NOT EXISTS idx_achievements_unlocked ON achievements(unlocked_at);
+
+CREATE INDEX IF NOT EXISTS idx_daily_challenges_date ON daily_challenges(date);
+CREATE INDEX IF NOT EXISTS idx_daily_challenges_active ON daily_challenges(is_active);
+CREATE INDEX IF NOT EXISTS idx_daily_challenges_game_type ON daily_challenges(game_type);
+
+CREATE INDEX IF NOT EXISTS idx_challenge_entries_challenge_user ON challenge_entries(challenge_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_challenge_entries_balance ON challenge_entries(final_balance DESC);
+CREATE INDEX IF NOT EXISTS idx_challenge_entries_completed ON challenge_entries(completed_at);
+
+CREATE INDEX IF NOT EXISTS idx_challenge_winners_challenge ON challenge_winners(challenge_id);
+CREATE INDEX IF NOT EXISTS idx_challenge_winners_rank ON challenge_winners(rank);
+
+CREATE INDEX IF NOT EXISTS idx_user_stats_user_id ON user_stats(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_stats_winnings ON user_stats(total_winnings DESC);
+CREATE INDEX IF NOT EXISTS idx_user_stats_games_played ON user_stats(games_played DESC);
+
+-- Trigger to update user_stats when game_history changes
+CREATE OR REPLACE FUNCTION update_user_stats()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO user_stats (user_id, total_winnings, total_losses, games_played, biggest_win)
+    VALUES (
+      NEW.user_id,
+      CASE WHEN NEW.result = 'win' THEN NEW.winnings ELSE 0 END,
+      CASE WHEN NEW.result = 'loss' THEN NEW.bet_amount ELSE 0 END,
+      1,
+      CASE WHEN NEW.result = 'win' THEN NEW.winnings ELSE 0 END
+    )
+    ON CONFLICT (user_id)
+    DO UPDATE SET
+      total_winnings = user_stats.total_winnings +
+        CASE WHEN NEW.result = 'win' THEN NEW.winnings ELSE 0 END,
+      total_losses = user_stats.total_losses +
+        CASE WHEN NEW.result = 'loss' THEN NEW.bet_amount ELSE 0 END,
+      games_played = user_stats.games_played + 1,
+      biggest_win = GREATEST(user_stats.biggest_win,
+        CASE WHEN NEW.result = 'win' THEN NEW.winnings ELSE 0 END),
+      current_win_streak = CASE WHEN NEW.result = 'win' THEN user_stats.current_win_streak + 1 ELSE 0 END,
+      longest_win_streak = GREATEST(user_stats.longest_win_streak,
+        CASE WHEN NEW.result = 'win' THEN user_stats.current_win_streak + 1 ELSE 0 END),
+      last_active_at = NOW(),
+      updated_at = NOW();
+    RETURN NEW;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for automatic user stats updates
+DROP TRIGGER IF EXISTS trigger_update_user_stats ON game_history;
+CREATE TRIGGER trigger_update_user_stats
+  AFTER INSERT ON game_history
+  FOR EACH ROW EXECUTE FUNCTION update_user_stats();
+
+-- Function to refresh leaderboard rankings
+CREATE OR REPLACE FUNCTION refresh_leaderboard()
+RETURNS INTEGER AS $$
+DECLARE
+  updated_count INTEGER;
+BEGIN
+  -- Clear existing leaderboard
+  DELETE FROM leaderboard;
+
+  -- Insert fresh rankings based on current chip balances
+  INSERT INTO leaderboard (user_id, balance, rank)
+  SELECT
+    id,
+    chip_balance,
+    ROW_NUMBER() OVER (ORDER BY chip_balance DESC)
+  FROM users
+  WHERE chip_balance > 0;
+
+  GET DIAGNOSTICS updated_count = ROW_COUNT;
+  RETURN updated_count;
+END;
+$$ LANGUAGE plpgsql;
+
